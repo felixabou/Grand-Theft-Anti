@@ -33,9 +33,15 @@ jobs:
         run: |
           anvil --port 8545 > /tmp/anvil.log 2>&1 &
           sleep 8
+          # Steps 4 and 5 of the walkthrough are SUPPOSED to be rejected, so forge
+          # exits with an error code even when everything behaved correctly.
+          # Judge the run by the summary line the script prints instead.
+          set +e
           forge script script/Walkthrough.s.sol \
             --rpc-url http://127.0.0.1:8545 \
-            --broadcast --skip-simulation
+            --broadcast --skip-simulation 2>&1 | tee /tmp/walkthrough.log
+          set -e
+          grep -q "ALL STEPS BEHAVED AS EXPECTED" /tmp/walkthrough.log
 
       - name: Gas costs
         run: forge test --gas-report | head -60
