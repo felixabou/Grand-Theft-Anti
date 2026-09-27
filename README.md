@@ -26,6 +26,18 @@ Smart-contract wallet built to stop wallet drains. No single stolen key can empt
 
 Daily caps are enforced by measuring the wallet's real balances before and after each transaction, so it doesn't matter *how* money leaves (transfer, swap, leftover approval, fee-on-transfer token).
 
+## The app
+
+`web/index.html` is the whole app: one file, no build step, no server. Host it on GitHub Pages and anyone can use it. It never sees a private key — your devices sign, the page just builds transactions and carries them between devices by QR code.
+
+Run it locally with any static server, or just open the file in a browser.
+
+`web/verify-signing.mjs` checks that the app signs in exactly the format the contract expects. Run it against a local chain any time the app or the contract changes:
+
+    anvil &
+    npm install ethers@6.13.4
+    node web/verify-signing.mjs
+
 ## Run the tests
     curl -L https://foundry.paradigm.xyz | bash && foundryup
     forge install foundry-rs/forge-std OpenZeppelin/openzeppelin-contracts@v5.1.0 --no-git
@@ -44,8 +56,11 @@ Daily caps are enforced by measuring the wallet's real balances before and after
 4. **Caps are per daily key.** Three active daily keys means three times the exposure.
 5. **Daily key + authenticator is uncapped.** If both your phone and your authenticator are compromised, funds are at risk. Keep the authenticator on a separate device.
 
-## Next phases
-1. Deterministic factory deploy (same address on every EVM chain)
-2. Authenticator app that decodes and shows the transaction itself
-3. Watcher that alerts on recovery attempts and revocations
-4. ERC-1271 support (dApp signatures), then Solana program
+See TESTING.md for how to try all of this yourself.
+
+## Still to build
+1. Onboarding: create a wallet from scratch in the app
+2. Token support beyond the native coin
+3. A watcher that alerts you when someone starts a recovery (you only have 48 hours to cancel)
+4. Native mobile apps for the authenticator
+5. ERC-1271 support (signing into dApps), then a Solana version

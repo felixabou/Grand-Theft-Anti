@@ -1,0 +1,714 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>GuardWallet</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --base:#E8E9E4; --surface:#FAFAF8; --ink:#191C1A; --steel:#5A625C; --hairline:#C8CBC3;
+  --signal:#C1352A; --rated:#9A6510; --locked:#1E5A52; --engaged:#2D7A6E;
+  --sans:"IBM Plex Sans",system-ui,sans-serif; --mono:"IBM Plex Mono",ui-monospace,monospace;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+*,*::before,*::after{box-sizing:inherit}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{
+  margin:0; background:var(--base); color:var(--ink); font-family:var(--sans);
+  font-size:16px; line-height:1.5; -webkit-font-smoothing:antialiased;
+}
+h1,h2,h3{margin:0; font-weight:600; letter-spacing:-0.01em}
+button{font:inherit; cursor:pointer; border:none; background:none; color:inherit}
+input,select{font:inherit; color:inherit}
+a{color:var(--locked)}
+:focus-visible{outline:2px solid var(--locked); outline-offset:2px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important; animation:none!important}}
+
+.wrap{max-width:760px; margin:0 auto; padding:0 16px 96px}
+
+/* ---- header: machine nameplate ---- */
+header{
+  display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+  padding:18px 0 16px; border-bottom:2px solid var(--ink);
+}
+.mark{font-weight:700; font-size:19px; letter-spacing:-0.02em; margin-right:auto}
+.mark span{color:var(--steel); font-weight:400}
+select.chain{
+  background:var(--surface); border:1px solid var(--hairline); border-radius:2px;
+  padding:7px 10px; font-size:14px;
+}
+.btn{
+  background:var(--ink); color:var(--surface); padding:8px 16px;
+  border-radius:2px; font-size:14px; font-weight:500;
+}
+.btn:hover{background:#000}
+.btn.ghost{background:none; color:var(--ink); border:1px solid var(--ink)}
+.btn.ghost:hover{background:rgba(0,0,0,.05)}
+.btn[disabled]{opacity:.4; cursor:not-allowed}
+.btn.wide{width:100%; padding:14px; font-size:16px}
+
+/* ---- status plate ---- */
+.plate{background:var(--surface); border:1px solid var(--hairline); border-top:3px solid var(--ink); padding:20px; margin-top:20px}
+.addr{font-family:var(--mono); font-size:13px; color:var(--steel); word-break:break-all}
+.bal{font-size:40px; font-weight:600; letter-spacing:-0.03em; line-height:1.1; margin:6px 0 2px}
+.bal em{font-style:normal; font-size:18px; font-weight:500; color:var(--steel)}
+
+/* the allowance gauge: the one bold element */
+.gauge{margin-top:22px}
+.gauge-head{display:flex; justify-content:space-between; align-items:baseline; font-size:14px; margin-bottom:7px}
+.gauge-head b{font-family:var(--mono); font-weight:500}
+.track{height:22px; background:#DCDED7; border:1px solid var(--hairline); position:relative; overflow:hidden}
+.fill{height:100%; background:var(--engaged); width:0; transition:width .45s ease}
+.fill.warn{background:var(--rated)}
+.fill.full{background:var(--signal)}
+.ticks{position:absolute; inset:0; display:flex; pointer-events:none}
+.ticks i{flex:1; border-right:1px solid rgba(255,255,255,.55)}
+.ticks i:last-child{border:none}
+
+/* ---- interlocks: two key slots ---- */
+.locks{display:flex; gap:10px; margin-top:20px; flex-wrap:wrap}
+.lock{
+  flex:1 1 160px; background:var(--surface); border:1px solid var(--hairline);
+  border-left:4px solid var(--hairline); padding:11px 13px;
+}
+.lock.on{border-left-color:var(--engaged); background:#F2F7F5}
+.lock.off{border-left-color:var(--steel)}
+.lock .r{font-size:13px; color:var(--steel)}
+.lock .s{font-weight:600; font-size:15px; margin-top:1px}
+.lock.on .s{color:var(--locked)}
+
+/* ---- tabs ---- */
+nav.tabs{display:flex; gap:0; margin-top:24px; border-bottom:1px solid var(--hairline)}
+nav.tabs button{
+  padding:11px 16px; font-size:15px; color:var(--steel);
+  border-bottom:3px solid transparent; margin-bottom:-1px;
+}
+nav.tabs button[aria-selected=true]{color:var(--ink); font-weight:600; border-bottom-color:var(--ink)}
+
+.panel{padding-top:22px}
+.panel[hidden]{display:none}
+
+label{display:block; font-size:14px; margin:14px 0 5px}
+input[type=text],input[type=number]{
+  width:100%; padding:11px 12px; background:var(--surface);
+  border:1px solid var(--hairline); border-radius:2px; font-family:var(--mono); font-size:14px;
+}
+input:focus{border-color:var(--ink)}
+.row{display:flex; gap:10px; flex-wrap:wrap}
+.row>*{flex:1 1 200px}
+
+.tier{display:flex; flex-direction:column; gap:8px; margin-top:8px}
+.tier label{
+  display:flex; gap:10px; align-items:flex-start; margin:0; padding:12px;
+  background:var(--surface); border:1px solid var(--hairline); cursor:pointer;
+}
+.tier label:has(input:checked){border-color:var(--ink); border-left:4px solid var(--ink)}
+.tier input{margin-top:3px; accent-color:var(--locked)}
+.tier .t{font-weight:600; font-size:15px}
+.tier .d{font-size:13px; color:var(--steel)}
+
+/* ---- review card: what you are actually signing ---- */
+.review{background:var(--surface); border:1px solid var(--hairline); border-left:4px solid var(--rated); padding:16px; margin-top:18px}
+.review h3{font-size:15px; margin-bottom:10px}
+.kv{display:flex; justify-content:space-between; gap:14px; padding:6px 0; border-bottom:1px solid var(--hairline); font-size:14px}
+.kv:last-child{border:none}
+.kv span:first-child{color:var(--steel); flex-shrink:0}
+.kv span:last-child{font-family:var(--mono); text-align:right; word-break:break-all}
+.flag{background:#FBF0E4; border-left:4px solid var(--rated); padding:11px 13px; font-size:14px; margin-top:10px}
+.flag.bad{background:#FBECEA; border-left-color:var(--signal); color:#8A2018}
+
+/* ---- QR handoff ---- */
+.qrbox{text-align:center; padding:18px; background:var(--surface); border:1px solid var(--hairline); margin-top:16px}
+.qrbox canvas,.qrbox img{max-width:100%; height:auto; image-rendering:pixelated}
+#scanview{width:100%; max-width:340px; border:1px solid var(--hairline); background:#000; display:block; margin:0 auto}
+textarea{
+  width:100%; min-height:88px; padding:10px; font-family:var(--mono); font-size:12px;
+  border:1px solid var(--hairline); background:var(--surface); border-radius:2px; resize:vertical;
+}
+
+/* ---- emergency stop ---- */
+.estop{
+  margin-top:28px; background:repeating-linear-gradient(45deg,#F0E6C8,#F0E6C8 12px,#E8DCB4 12px,#E8DCB4 24px);
+  border:1px solid var(--hairline); padding:16px;
+}
+.estop h3{font-size:15px}
+.estop p{margin:5px 0 12px; font-size:14px; color:#4A4530; max-width:60ch}
+.stopbtn{
+  width:100%; background:var(--signal); color:#fff; font-weight:700; font-size:16px;
+  padding:16px; border-radius:2px; border-bottom:4px solid #8A2018;
+}
+.stopbtn:active{border-bottom-width:1px; transform:translateY(3px)}
+
+.note{font-size:14px; color:var(--steel); margin-top:12px; max-width:68ch}
+.err{background:#FBECEA; border-left:4px solid var(--signal); padding:11px 13px; font-size:14px; margin-top:14px; color:#8A2018}
+.ok{background:#EDF5F2; border-left:4px solid var(--engaged); padding:11px 13px; font-size:14px; margin-top:14px}
+.hide{display:none!important}
+.demo-tag{background:var(--rated); color:#fff; font-size:12px; padding:3px 8px; border-radius:2px; font-weight:600}
+footer{margin-top:40px; padding-top:18px; border-top:1px solid var(--hairline); font-size:13px; color:var(--steel)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="mark">GuardWallet <span>control</span></div>
+  <select class="chain" id="chain" aria-label="Network"></select>
+  <button class="btn" id="connect">Connect</button>
+</header>
+
+<!-- ============ SETUP ============ -->
+<section id="setup" class="plate">
+  <h2 style="font-size:17px">Open a wallet</h2>
+  <p class="note">Paste the address of a GuardWallet. Nothing here can spend anything on its own: every action still needs signatures from your devices.</p>
+  <label for="waddr">Wallet address</label>
+  <input type="text" id="waddr" placeholder="0x…" spellcheck="false" autocomplete="off">
+  <div class="row" style="margin-top:14px">
+    <button class="btn" id="load">Open wallet</button>
+    <button class="btn ghost" id="demo">Try a demo wallet</button>
+  </div>
+  <div id="setuperr"></div>
+</section>
+
+<!-- ============ MAIN ============ -->
+<main id="main" class="hide">
+
+  <section class="plate">
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px">
+      <div class="addr" id="mAddr"></div>
+      <span class="demo-tag hide" id="demoTag">Demo</span>
+    </div>
+    <div class="bal" id="mBal">—</div>
+
+    <div class="gauge" id="gauge">
+      <div class="gauge-head">
+        <span id="gLabel">Today's allowance for this device</span>
+        <b id="gNum"></b>
+      </div>
+      <div class="track"><div class="fill" id="gFill"></div>
+        <div class="ticks"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+      </div>
+    </div>
+
+    <div class="locks" id="locks"></div>
+  </section>
+
+  <nav class="tabs" role="tablist">
+    <button role="tab" aria-selected="true" data-tab="send">Send</button>
+    <button role="tab" aria-selected="false" data-tab="approve">Approve a request</button>
+    <button role="tab" aria-selected="false" data-tab="keys">Keys</button>
+  </nav>
+
+  <!-- ---- SEND ---- -->
+  <section class="panel" id="p-send">
+    <label for="to">Send to</label>
+    <input type="text" id="to" placeholder="0x…" spellcheck="false" autocomplete="off">
+    <label for="amt">Amount</label>
+    <input type="number" id="amt" step="any" min="0" placeholder="0.0">
+
+    <h3 style="font-size:15px; margin-top:20px">Who approves this</h3>
+    <div class="tier">
+      <label><input type="radio" name="tier" value="session" checked>
+        <span><span class="t">This device only</span><span class="d">Fast. Limited to today's allowance and approved apps.</span></span></label>
+      <label><input type="radio" name="tier" value="sessionAuth">
+        <span><span class="t">This device + authenticator</span><span class="d">No limit. Needs your second device to approve.</span></span></label>
+      <label><input type="radio" name="tier" value="master">
+        <span><span class="t">Master key + authenticator</span><span class="d">Full control. Use your offline master key.</span></span></label>
+    </div>
+
+    <button class="btn wide" id="build" style="margin-top:20px">Review and sign</button>
+    <div id="sendout"></div>
+  </section>
+
+  <!-- ---- APPROVE (authenticator mode) ---- -->
+  <section class="panel" id="p-approve" hidden>
+    <p class="note">Use this on your second device. Scan the request, read what it actually does, then approve it. This device checks the request itself, so a compromised main phone cannot lie to you about what you are signing.</p>
+    <div class="row" style="margin-top:14px">
+      <button class="btn" id="scanStart">Scan with camera</button>
+      <button class="btn ghost" id="scanStop">Stop camera</button>
+    </div>
+    <video id="scanview" class="hide" playsinline muted></video>
+    <label for="pasted">Or paste the request</label>
+    <textarea id="pasted" spellcheck="false" placeholder="Paste the request text from your other device"></textarea>
+    <button class="btn wide" id="decode" style="margin-top:12px">Read this request</button>
+    <div id="appout"></div>
+  </section>
+
+  <!-- ---- KEYS ---- -->
+  <section class="panel" id="p-keys" hidden>
+    <div id="keyinfo"></div>
+    <div class="estop">
+      <h3>Emergency stop</h3>
+      <p>Turns off every daily key on this wallet right away. Your master key, authenticator and backup key keep working. Use this the moment a phone goes missing or something looks wrong.</p>
+      <button class="stopbtn" id="estop">Turn off all daily keys</button>
+    </div>
+    <div id="keyout"></div>
+  </section>
+
+</main>
+
+<footer>
+  Not audited. Test with small amounts first. Your keys never leave your devices, and this page never sends them anywhere.
+</footer>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.4/ethers.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<script>
+"use strict";
+
+/* ======================= chains ======================= */
+const CHAINS = {
+  1:       {name:"Ethereum",      rpc:"https://eth.llamarpc.com",                        sym:"ETH"},
+  8453:    {name:"Base",          rpc:"https://mainnet.base.org",                        sym:"ETH"},
+  42161:   {name:"Arbitrum",      rpc:"https://arb1.arbitrum.io/rpc",                    sym:"ETH"},
+  10:      {name:"Optimism",      rpc:"https://mainnet.optimism.io",                     sym:"ETH"},
+  137:     {name:"Polygon",       rpc:"https://polygon-rpc.com",                         sym:"POL"},
+  56:      {name:"BNB Chain",     rpc:"https://bsc-dataseed.binance.org",                sym:"BNB"},
+  11155111:{name:"Sepolia test",  rpc:"https://ethereum-sepolia-rpc.publicnode.com",     sym:"ETH"},
+  84532:   {name:"Base Sepolia",  rpc:"https://sepolia.base.org",                        sym:"ETH"},
+  31337:   {name:"Local (anvil)", rpc:"http://127.0.0.1:8545",                           sym:"ETH"},
+};
+
+const ABI = [
+  "function owner() view returns (address)",
+  "function authenticator() view returns (address)",
+  "function recovery() view returns (address)",
+  "function nonce() view returns (uint256)",
+  "function sessionEpoch() view returns (uint64)",
+  "function sessions(address) view returns (uint64 generation,uint64 validUntil,uint64 epoch,uint64 nonce)",
+  "function isSessionActive(address) view returns (bool)",
+  "function sessionSpentToday(address,address) view returns (uint256 spent,uint256 cap)",
+  "function getRevokeAllHash(uint64) view returns (bytes32)",
+  "function execute((address to,uint256 value,bytes data)[] calls,uint256 deadline,bytes ownerSig,bytes authenticatorSig)",
+  "function executeSession(address key,(address to,uint256 value,bytes data)[] calls,uint256 deadline,bytes sessionSig)",
+  "function executeWithSessionAndAuth(address key,(address to,uint256 value,bytes data)[] calls,uint256 deadline,bytes sessionSig,bytes authenticatorSig)",
+  "function revokeAllSessions(bytes sig)",
+];
+
+/* EIP-712 shapes: these must match the contract's typehash strings exactly. */
+const CALL_TYPE = [{name:"to",type:"address"},{name:"value",type:"uint256"},{name:"data",type:"bytes"}];
+const TYPES = {
+  execute: {Execute:[{name:"calls",type:"Call[]"},{name:"nonce",type:"uint256"},{name:"deadline",type:"uint256"}], Call:CALL_TYPE},
+  session: {SessionExecute:[{name:"sessionKey",type:"address"},{name:"generation",type:"uint64"},{name:"sessionNonce",type:"uint64"},{name:"calls",type:"Call[]"},{name:"deadline",type:"uint256"}], Call:CALL_TYPE},
+  sessionAuth: {SessionAuthExecute:[{name:"sessionKey",type:"address"},{name:"generation",type:"uint64"},{name:"calls",type:"Call[]"},{name:"nonce",type:"uint256"},{name:"deadline",type:"uint256"}], Call:CALL_TYPE},
+  revokeAll: {RevokeAllSessions:[{name:"epoch",type:"uint64"}]},
+};
+
+/* ======================= state ======================= */
+const S = {
+  chainId: 8453, wallet:null, signer:null, account:null, demo:false,
+  read:null, info:null, pending:null,
+};
+const $ = (id)=>document.getElementById(id);
+const short = (a)=> a ? a.slice(0,6)+"…"+a.slice(-4) : "—";
+const esc = (s)=> String(s).replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+/* ======================= boot ======================= */
+(function initChains(){
+  const sel = $("chain");
+  for (const [id,c] of Object.entries(CHAINS)) {
+    const o = document.createElement("option");
+    o.value = id; o.textContent = c.name;
+    if (+id === S.chainId) o.selected = true;
+    sel.appendChild(o);
+  }
+  sel.onchange = ()=>{ S.chainId = +sel.value; if (S.wallet) loadWallet(S.wallet); };
+})();
+
+function provider(){
+  return new ethers.JsonRpcProvider(CHAINS[S.chainId].rpc, S.chainId, {staticNetwork:true});
+}
+
+$("connect").onclick = async ()=>{
+  if (!window.ethereum) { return setErr("setuperr","No browser wallet found. Install one, or open this page in your wallet's built-in browser."); }
+  try {
+    const bp = new ethers.BrowserProvider(window.ethereum);
+    await bp.send("eth_requestAccounts", []);
+    S.signer = await bp.getSigner();
+    S.account = await S.signer.getAddress();
+    const net = await bp.getNetwork();
+    if (CHAINS[Number(net.chainId)]) { S.chainId = Number(net.chainId); $("chain").value = String(S.chainId); }
+    $("connect").textContent = short(S.account);
+    if (S.wallet) loadWallet(S.wallet);
+  } catch(e){ setErr("setuperr", friendly(e)); }
+};
+
+$("load").onclick = ()=>{
+  const a = $("waddr").value.trim();
+  if (!ethers.isAddress(a)) return setErr("setuperr","That is not a valid address. It should start with 0x and be 42 characters long.");
+  S.demo = false; loadWallet(a);
+};
+
+$("demo").onclick = ()=>{
+  S.demo = true; S.wallet = "0xe6097F0D69Db263672D2Fd3C1E5A330Acb9C438e";
+  S.info = {
+    owner:"0xe05fcC23807536bEe418f142D19fa0d21BB0cfF7",
+    auth:"0x2B5AD5c4795c026514f8317c7a215E218DcCD6cF",
+    recovery:"0x6813Eb9362372EEF6200f3b1dbC3f819671cBA69",
+    nonce:3n, epoch:0n, balance:ethers.parseEther("8.7"),
+    session:{active:true, generation:1n, nonce:1n, spent:ethers.parseEther("0.3"), cap:ethers.parseEther("0.5")},
+  };
+  render();
+};
+
+async function loadWallet(addr){
+  S.wallet = addr;
+  try {
+    const c = new ethers.Contract(addr, ABI, provider());
+    const code = await provider().getCode(addr);
+    if (code === "0x") throw new Error("NOWALLET");
+    const [owner, auth, recovery, nonce, epoch, balance] = await Promise.all([
+      c.owner(), c.authenticator(), c.recovery(), c.nonce(), c.sessionEpoch(), provider().getBalance(addr),
+    ]);
+    S.info = {owner, auth, recovery, nonce, epoch, balance, session:null};
+    if (S.account) {
+      try {
+        const [s, active, spend] = await Promise.all([
+          c.sessions(S.account), c.isSessionActive(S.account), c.sessionSpentToday(S.account, ethers.ZeroAddress),
+        ]);
+        S.info.session = {active, generation:s.generation, nonce:s.nonce, spent:spend.spent, cap:spend.cap};
+      } catch(_) {}
+    }
+    S.demo = false;
+    render();
+  } catch(e){
+    if (String(e.message).includes("NOWALLET")) setErr("setuperr","No contract at that address on "+CHAINS[S.chainId].name+". Check the network selector at the top.");
+    else setErr("setuperr", friendly(e));
+  }
+}
+
+/* ======================= render ======================= */
+function render(){
+  $("setup").classList.add("hide"); $("main").classList.remove("hide");
+  $("demoTag").classList.toggle("hide", !S.demo);
+  const i = S.info, sym = CHAINS[S.chainId].sym;
+  $("mAddr").textContent = S.wallet;
+  $("mBal").innerHTML = esc(fmt(i.balance)) + ' <em>' + esc(sym) + '</em>';
+
+  const ses = i.session;
+  if (ses && ses.active && ses.cap > 0n) {
+    const pct = Number(ses.spent * 10000n / ses.cap)/100;
+    $("gLabel").textContent = "Today's allowance for this device";
+    $("gNum").textContent = fmt(ses.cap - ses.spent)+" of "+fmt(ses.cap)+" "+sym+" left";
+    const f = $("gFill"); f.style.width = Math.min(100,pct)+"%";
+    f.className = "fill" + (pct >= 100 ? " full" : pct >= 75 ? " warn" : "");
+    $("gauge").classList.remove("hide");
+  } else {
+    $("gauge").classList.add("hide");
+  }
+
+  const me = (S.account||"").toLowerCase();
+  const roles = [
+    ["Master key", i.owner, "kept offline"],
+    ["Authenticator", i.auth, "second device"],
+    ["Backup key", i.recovery, "48-hour recovery"],
+  ];
+  $("locks").innerHTML = roles.map(([r,a,d])=>{
+    const mine = a && a.toLowerCase() === me;
+    return '<div class="lock '+(mine?"on":"off")+'"><div class="r">'+esc(r)+'</div><div class="s">'+
+      esc(mine ? "This device" : short(a))+'</div><div class="r">'+esc(mine?"connected":d)+'</div></div>';
+  }).join("") + (ses && ses.active
+    ? '<div class="lock on"><div class="r">Daily key</div><div class="s">This device</div><div class="r">active</div></div>' : "");
+
+  $("keyinfo").innerHTML =
+    '<div class="review" style="border-left-color:var(--locked)"><h3>What controls this wallet</h3>'+
+    roles.map(([r,a])=>'<div class="kv"><span>'+esc(r)+'</span><span>'+esc(a)+'</span></div>').join("")+
+    '<div class="kv"><span>Transactions so far</span><span>'+esc(String(i.nonce))+'</span></div></div>';
+}
+
+document.querySelectorAll("nav.tabs button").forEach(b=>{
+  b.onclick = ()=>{
+    document.querySelectorAll("nav.tabs button").forEach(x=>x.setAttribute("aria-selected", String(x===b)));
+    ["send","approve","keys"].forEach(t=> $("p-"+t).hidden = (t !== b.dataset.tab));
+    if (b.dataset.tab !== "approve") stopScan();
+  };
+});
+
+/* ======================= build a request ======================= */
+$("build").onclick = async ()=>{
+  clear("sendout");
+  const to = $("to").value.trim(), amt = $("amt").value.trim();
+  if (!ethers.isAddress(to)) return setErr("sendout","Enter a valid destination address.");
+  if (!amt || Number(amt) <= 0) return setErr("sendout","Enter an amount greater than zero.");
+  const tier = document.querySelector("input[name=tier]:checked").value;
+  if (!S.signer) return setErr("sendout","Connect your wallet first, using the button at the top.");
+
+  let value; try { value = ethers.parseEther(amt); } catch { return setErr("sendout","That amount is not a number."); }
+  const calls = [{to, value, data:"0x"}];
+  const deadline = BigInt(Math.floor(Date.now()/1000) + 3600);
+  const i = S.info;
+
+  let req;
+  if (tier === "session") {
+    if (!i.session || !i.session.active) return setErr("sendout","This device is not an active daily key on this wallet. Choose another approver, or add a daily key using your master key and authenticator.");
+    req = {kind:"session", sessionKey:S.account, generation:i.session.generation, sessionNonce:i.session.nonce};
+  } else if (tier === "sessionAuth") {
+    if (!i.session || !i.session.active) return setErr("sendout","This device is not an active daily key on this wallet.");
+    req = {kind:"sessionAuth", sessionKey:S.account, generation:i.session.generation, nonce:i.nonce};
+  } else {
+    req = {kind:"execute", nonce:i.nonce};
+  }
+  req = {v:1, chainId:S.chainId, wallet:S.wallet, deadline, calls, ...req};
+
+  renderReview("sendout", req, true);
+};
+
+function domain(){ return {name:"GuardWallet", version:"1", chainId:S.chainId, verifyingContract:S.wallet}; }
+
+function typedFor(req){
+  const calls = req.calls.map(c=>({to:c.to, value:BigInt(c.value), data:c.data}));
+  if (req.kind === "execute")
+    return [TYPES.execute, {calls, nonce:BigInt(req.nonce), deadline:BigInt(req.deadline)}];
+  if (req.kind === "session")
+    return [TYPES.session, {sessionKey:req.sessionKey, generation:BigInt(req.generation), sessionNonce:BigInt(req.sessionNonce), calls, deadline:BigInt(req.deadline)}];
+  if (req.kind === "sessionAuth")
+    return [TYPES.sessionAuth, {sessionKey:req.sessionKey, generation:BigInt(req.generation), calls, nonce:BigInt(req.nonce), deadline:BigInt(req.deadline)}];
+  throw new Error("Unknown request type");
+}
+
+/* ======================= plain-English review ======================= */
+function describe(req){
+  const sym = CHAINS[req.chainId]?.sym || "ETH";
+  const lines = [], flags = [];
+  for (const c of req.calls) {
+    const v = BigInt(c.value);
+    if (c.data === "0x" || !c.data) lines.push(["Send", fmt(v)+" "+sym+" to "+c.to]);
+    else lines.push(["Call", c.to+" with "+((c.data.length-2)/2)+" bytes of instructions"]);
+    if (c.data && c.data !== "0x") flags.push(["warn","This request runs code on another contract. Only approve it if you know what that contract is."]);
+  }
+  if (req.wallet && S.wallet && req.wallet.toLowerCase() !== S.wallet.toLowerCase())
+    flags.push(["bad","This request is for a different wallet than the one you have open."]);
+  if (req.chainId !== S.chainId)
+    flags.push(["bad","This request is for "+(CHAINS[req.chainId]?.name||("chain "+req.chainId))+", but you are on "+CHAINS[S.chainId].name+"."]);
+  const left = Number(BigInt(req.deadline) - BigInt(Math.floor(Date.now()/1000)));
+  if (left <= 0) flags.push(["bad","This request has expired. Ask for a fresh one."]);
+  const who = {execute:"Master key + authenticator", session:"A daily key on its own", sessionAuth:"A daily key + authenticator"}[req.kind] || req.kind;
+  return {lines, flags, who, left};
+}
+
+function renderReview(outId, req, canSign){
+  const d = describe(req);
+  const el = $(outId);
+  el.innerHTML =
+    '<div class="review"><h3>What this actually does</h3>'+
+    d.lines.map(([k,v])=>'<div class="kv"><span>'+esc(k)+'</span><span>'+esc(v)+'</span></div>').join("")+
+    '<div class="kv"><span>Wallet</span><span>'+esc(req.wallet)+'</span></div>'+
+    '<div class="kv"><span>Network</span><span>'+esc(CHAINS[req.chainId]?.name || req.chainId)+'</span></div>'+
+    '<div class="kv"><span>Approved by</span><span>'+esc(d.who)+'</span></div>'+
+    '<div class="kv"><span>Valid for</span><span>'+esc(d.left > 0 ? Math.floor(d.left/60)+" more minutes" : "expired")+'</span></div>'+
+    d.flags.map(([k,t])=>'<div class="flag '+(k==="bad"?"bad":"")+'">'+esc(t)+'</div>').join("")+
+    '</div>';
+  if (canSign) {
+    const b = document.createElement("button");
+    b.className = "btn wide"; b.style.marginTop = "14px"; b.textContent = "Sign on this device";
+    b.onclick = ()=> signRequest(req, outId);
+    el.appendChild(b);
+  }
+  return d;
+}
+
+/* ======================= signing ======================= */
+async function signRequest(req, outId){
+  try{
+    const [types, value] = typedFor(req);
+    const sig = await S.signer.signTypedData(domain(), types, value);
+    req.sigs = req.sigs || {};
+    const who = await S.signer.getAddress();
+    req.sigs[who.toLowerCase()] = sig;
+    S.pending = req;
+    afterSign(req, outId);
+  } catch(e){ setErr(outId, friendly(e)); }
+}
+
+function needsSecond(req){
+  return req.kind === "execute" || req.kind === "sessionAuth";
+}
+
+function afterSign(req, outId){
+  const el = $(outId);
+  if (!needsSecond(req) || Object.keys(req.sigs).length >= 2) {
+    el.insertAdjacentHTML("beforeend", '<div class="ok">Signed and ready to send.</div>');
+    const b = document.createElement("button");
+    b.className = "btn wide"; b.style.marginTop = "12px"; b.textContent = "Send it";
+    b.onclick = ()=> submit(req, outId);
+    el.appendChild(b);
+    return;
+  }
+  el.insertAdjacentHTML("beforeend",
+    '<div class="ok">Signed here. Now approve it on your other device.</div>'+
+    '<div class="qrbox"><div id="qrslot"></div><p class="note" style="margin:10px auto 0">Scan this with your second device, then paste its reply below.</p></div>'+
+    '<label for="reply">Reply from your other device</label><textarea id="reply" spellcheck="false" placeholder="Paste the approval text"></textarea>');
+  makeQR("qrslot", pack(req));
+  const b = document.createElement("button");
+  b.className = "btn wide"; b.style.marginTop = "12px"; b.textContent = "Add their approval";
+  b.onclick = ()=>{
+    try {
+      const rep = unpack($("reply").value.trim());
+      if (!rep.sigs) throw new Error("That reply has no approval in it.");
+      Object.assign(req.sigs, rep.sigs);
+      if (Object.keys(req.sigs).length < 2) throw new Error("Still waiting on the second approval.");
+      $(outId).querySelectorAll(".qrbox,label,textarea,button").forEach(n=>n.remove());
+      afterSign(req, outId);
+    } catch(e){ setErr(outId, friendly(e)); }
+  };
+  $(outId).appendChild(b);
+}
+
+/* ======================= submit ======================= */
+async function submit(req, outId){
+  if (S.demo) return setErr(outId,"This is the demo wallet, so nothing is sent. Open a real wallet address to send for real.");
+  try{
+    const c = new ethers.Contract(S.wallet, ABI, S.signer);
+    const calls = req.calls.map(x=>[x.to, BigInt(x.value), x.data]);
+    const sigOf = (addr)=> req.sigs[String(addr).toLowerCase()];
+    let tx;
+    if (req.kind === "session") {
+      tx = await c.executeSession(req.sessionKey, calls, BigInt(req.deadline), sigOf(req.sessionKey));
+    } else if (req.kind === "sessionAuth") {
+      tx = await c.executeWithSessionAndAuth(req.sessionKey, calls, BigInt(req.deadline), sigOf(req.sessionKey), sigOf(S.info.auth));
+    } else {
+      tx = await c.execute(calls, BigInt(req.deadline), sigOf(S.info.owner), sigOf(S.info.auth));
+    }
+    $(outId).insertAdjacentHTML("beforeend",'<div class="ok">Sent. Waiting for the network to confirm…</div>');
+    await tx.wait();
+    $(outId).insertAdjacentHTML("beforeend",'<div class="ok">Confirmed. Transaction '+esc(tx.hash)+'</div>');
+    loadWallet(S.wallet);
+  } catch(e){ setErr(outId, friendly(e)); }
+}
+
+/* ======================= authenticator mode ======================= */
+$("decode").onclick = ()=>{
+  clear("appout");
+  try {
+    const req = unpack($("pasted").value.trim());
+    showForApproval(req);
+  } catch(e){ setErr("appout", friendly(e)); }
+};
+
+function showForApproval(req){
+  const d = renderReview("appout", req, false);
+  const bad = d.flags.some(f=>f[0]==="bad");
+  const b = document.createElement("button");
+  b.className = "btn wide"; b.style.marginTop = "14px";
+  b.textContent = bad ? "Do not approve this" : "Approve on this device";
+  b.disabled = bad;
+  b.onclick = async ()=>{
+    if (!S.signer) return setErr("appout","Connect this device's wallet first.");
+    try{
+      const saved = S.wallet, savedChain = S.chainId;
+      S.wallet = req.wallet; S.chainId = req.chainId;
+      const [types, value] = typedFor(req);
+      const sig = await S.signer.signTypedData(domain(), types, value);
+      S.wallet = saved; S.chainId = savedChain;
+      const who = (await S.signer.getAddress()).toLowerCase();
+      const reply = {v:1, sigs:{[who]:sig}};
+      $("appout").insertAdjacentHTML("beforeend",
+        '<div class="ok">Approved. Send this back to your other device.</div>'+
+        '<div class="qrbox"><div id="qrreply"></div></div>'+
+        '<textarea readonly spellcheck="false">'+esc(pack(reply))+'</textarea>');
+      makeQR("qrreply", pack(reply));
+    } catch(e){ setErr("appout", friendly(e)); }
+  };
+  $("appout").appendChild(b);
+}
+
+/* ======================= emergency stop ======================= */
+$("estop").onclick = async ()=>{
+  clear("keyout");
+  if (!S.signer) return setErr("keyout","Connect your master key or authenticator device first.");
+  if (S.demo) return setErr("keyout","This is the demo wallet, so nothing is sent.");
+  try{
+    const me = (await S.signer.getAddress()).toLowerCase();
+    if (me !== S.info.owner.toLowerCase() && me !== S.info.auth.toLowerCase())
+      return setErr("keyout","Only your master key or your authenticator can do this. Connect one of those devices.");
+    const sig = await S.signer.signTypedData(domain(), TYPES.revokeAll, {epoch:BigInt(S.info.epoch)});
+    const c = new ethers.Contract(S.wallet, ABI, S.signer);
+    const tx = await c.revokeAllSessions(sig);
+    $("keyout").insertAdjacentHTML("beforeend",'<div class="ok">Turning off every daily key…</div>');
+    await tx.wait();
+    $("keyout").insertAdjacentHTML("beforeend",'<div class="ok">Done. Every daily key on this wallet is off.</div>');
+    loadWallet(S.wallet);
+  } catch(e){ setErr("keyout", friendly(e)); }
+};
+
+/* ======================= QR ======================= */
+function pack(o){
+  return JSON.stringify(o, (k,v)=> typeof v === "bigint" ? v.toString() : v);
+}
+function unpack(s){
+  if (!s) throw new Error("Nothing to read. Scan a request or paste one in.");
+  let o; try { o = JSON.parse(s); } catch { throw new Error("That text is not a request this app can read."); }
+  if (!o.sigs && (!o.calls || !o.wallet)) throw new Error("That text is missing the transaction details.");
+  return o;
+}
+function makeQR(slotId, text){
+  const el = $(slotId); if (!el) return;
+  el.innerHTML = "";
+  if (text.length > 2200) {
+    el.innerHTML = '<div class="flag">This request is too big for a QR code. Copy the text below across instead.</div>'+
+                   '<textarea readonly spellcheck="false">'+esc(text)+'</textarea>';
+    return;
+  }
+  new QRCode(el, {text, width:230, height:230, correctLevel:QRCode.CorrectLevel.M});
+}
+
+let scanTimer = null, scanStream = null;
+$("scanStart").onclick = async ()=>{
+  clear("appout");
+  try{
+    scanStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"}});
+    const v = $("scanview"); v.classList.remove("hide"); v.srcObject = scanStream; await v.play();
+    const cv = document.createElement("canvas"), ctx = cv.getContext("2d", {willReadFrequently:true});
+    scanTimer = setInterval(()=>{
+      if (!v.videoWidth) return;
+      cv.width = v.videoWidth; cv.height = v.videoHeight;
+      ctx.drawImage(v, 0, 0);
+      const img = ctx.getImageData(0, 0, cv.width, cv.height);
+      const found = window.jsQR ? jsQR(img.data, img.width, img.height) : null;
+      if (found && found.data) {
+        stopScan();
+        $("pasted").value = found.data;
+        try { showForApproval(unpack(found.data)); } catch(e){ setErr("appout", friendly(e)); }
+      }
+    }, 250);
+  } catch(e){ setErr("appout","Cannot open the camera. Allow camera access, or paste the request as text instead."); }
+};
+$("scanStop").onclick = stopScan;
+function stopScan(){
+  if (scanTimer) { clearInterval(scanTimer); scanTimer = null; }
+  if (scanStream) { scanStream.getTracks().forEach(t=>t.stop()); scanStream = null; }
+  $("scanview").classList.add("hide");
+}
+
+/* ======================= helpers ======================= */
+function fmt(wei){
+  const s = ethers.formatEther(wei);
+  const n = Number(s);
+  if (n === 0) return "0";
+  if (n < 0.0001) return s;
+  return n.toLocaleString(undefined, {maximumFractionDigits:5});
+}
+function setErr(id, msg){ const e = $(id); if (e) e.insertAdjacentHTML("beforeend", '<div class="err">'+esc(msg)+'</div>'); }
+function clear(id){ const e = $(id); if (e) e.innerHTML = ""; }
+function friendly(e){
+  const m = (e && (e.shortMessage || e.reason || e.message)) || String(e);
+  if (/user rejected|ACTION_REJECTED/i.test(m)) return "You cancelled that in your wallet.";
+  if (/insufficient funds/i.test(m)) return "Not enough coins to pay the network fee.";
+  if (/BadSessionSignature/i.test(m)) return "The wallet rejected that approval. The daily key may have been changed or turned off.";
+  if (/SpendLimitExceeded/i.test(m)) return "That is over today's allowance for this device. Wait until tomorrow, or use your authenticator to approve it.";
+  if (/SessionInactive/i.test(m)) return "This daily key is turned off or expired.";
+  if (/SessionCallNotAllowed/i.test(m)) return "A daily key is not allowed to do that on its own.";
+  if (/BadAuthenticatorSignature/i.test(m)) return "The authenticator's approval did not match.";
+  if (/BadOwnerSignature/i.test(m)) return "The master key's approval did not match.";
+  if (/Expired/i.test(m)) return "That request expired. Build a fresh one.";
+  if (/could not detect network|failed to fetch|network error/i.test(m)) return "Cannot reach "+CHAINS[S.chainId].name+" right now. Try another network.";
+  return m;
+}
+</script>
+</body>
+</html>
