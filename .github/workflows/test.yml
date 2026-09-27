@@ -1,0 +1,41 @@
+name: Tests
+
+# Runs on every push, and can be started by hand from the Actions tab
+# (including from a phone: Actions -> Tests -> Run workflow).
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Test suite and live walkthrough
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get the code
+        uses: actions/checkout@v4
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Install libraries
+        run: |
+          forge install foundry-rs/forge-std --no-git
+          forge install OpenZeppelin/openzeppelin-contracts@v5.1.0 --no-git
+
+      - name: Build
+        run: forge build --sizes
+
+      - name: Run all 71 tests
+        run: forge test -vv
+
+      - name: Live walkthrough on a real chain
+        run: |
+          anvil --port 8545 > /tmp/anvil.log 2>&1 &
+          sleep 8
+          forge script script/Walkthrough.s.sol \
+            --rpc-url http://127.0.0.1:8545 \
+            --broadcast --skip-simulation
+
+      - name: Gas costs
+        run: forge test --gas-report | head -60
