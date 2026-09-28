@@ -24,6 +24,10 @@ const TYPES = {
   session: { SessionExecute: [{ name: "sessionKey", type: "address" }, { name: "generation", type: "uint64" }, { name: "sessionNonce", type: "uint64" }, { name: "calls", type: "Call[]" }, { name: "deadline", type: "uint256" }], Call: CALL_TYPE },
   sessionAuth: { SessionAuthExecute: [{ name: "sessionKey", type: "address" }, { name: "generation", type: "uint64" }, { name: "calls", type: "Call[]" }, { name: "nonce", type: "uint256" }, { name: "deadline", type: "uint256" }], Call: CALL_TYPE },
   revokeAll: { RevokeAllSessions: [{ name: "epoch", type: "uint64" }] },
+  addSession: { AddSession: [
+    { name: "sessionKey", type: "address" }, { name: "validUntil", type: "uint64" }, { name: "ethDailyCap", type: "uint256" },
+    { name: "tokens", type: "address[]" }, { name: "tokenDailyCaps", type: "uint256[]" }, { name: "targets", type: "address[]" },
+    { name: "nonce", type: "uint256" }, { name: "deadline", type: "uint256" }] },
 };
 
 // guard against the page drifting away from this file
@@ -84,6 +88,24 @@ check("SessionAuthExecute (daily key + authenticator)",
 check("RevokeAllSessions (emergency stop)",
   ethers.TypedDataEncoder.hash(domain, TYPES.revokeAll, { epoch: 0n }),
   await wallet.getRevokeAllHash(0n));
+
+// a daily key with tokens and approved apps, and an empty one, to cover both array shapes
+for (const [label, sp] of [
+  ["AddSession (with tokens and apps)", {
+    key: daily.address, validUntil: BigInt(Math.floor(Date.now()/1000) + 30*86400), ethDailyCap: ethers.parseEther("0.5"),
+    tokens: [ethers.getAddress("0x00000000000000000000000000000000000000ce")], tokenDailyCaps: [500n * 10n**18n],
+    targets: [ethers.getAddress("0x00000000000000000000000000000000000000aa")] }],
+  ["AddSession (no tokens, no apps)", {
+    key: daily.address, validUntil: BigInt(Math.floor(Date.now()/1000) + 7*86400), ethDailyCap: ethers.parseEther("0.1"),
+    tokens: [], tokenDailyCaps: [], targets: [] }],
+]) {
+  check(label,
+    ethers.TypedDataEncoder.hash(domain, TYPES.addSession, {
+      sessionKey: sp.key, validUntil: sp.validUntil, ethDailyCap: sp.ethDailyCap,
+      tokens: sp.tokens, tokenDailyCaps: sp.tokenDailyCaps, targets: sp.targets, nonce: 0n, deadline }),
+    await wallet.getAddSessionHash(
+      [sp.key, sp.validUntil, sp.ethDailyCap, sp.tokens, sp.tokenDailyCaps, sp.targets], 0n, deadline));
+}
 
 check("EIP-712 domain separator",
   ethers.TypedDataEncoder.hashDomain(domain),

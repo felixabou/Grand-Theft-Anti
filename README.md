@@ -32,11 +32,14 @@ Daily caps are enforced by measuring the wallet's real balances before and after
 
 Run it locally with any static server, or just open the file in a browser.
 
-`web/verify-signing.mjs` checks that the app signs in exactly the format the contract expects. Run it against a local chain any time the app or the contract changes:
+The app can create a wallet from scratch: you supply your three key addresses and a factory address, it shows you the address your wallet will land on, and creates it. It can also add daily keys. It never generates or handles a private key, and it ships no compiled bytecode, so there is nothing in the page you have to take on trust. The factory is deployed once per network with `forge script script/Deploy.s.sol` and then shared by everyone on that network.
+
+Two checks keep the page and the contracts from drifting apart. Run them against a local chain whenever either side changes:
 
     anvil &
     npm install ethers@6.13.4
-    node web/verify-signing.mjs
+    node web/verify-signing.mjs      # every signature format matches the contract
+    node web/verify-onboarding.mjs   # create a wallet and a daily key, the way the page does
 
 ## Run the tests
     curl -L https://foundry.paradigm.xyz | bash && foundryup
@@ -59,8 +62,7 @@ Run it locally with any static server, or just open the file in a browser.
 See TESTING.md for how to try all of this yourself.
 
 ## Still to build
-1. Onboarding: create a wallet from scratch in the app
-2. Token support beyond the native coin
-3. A watcher that alerts you when someone starts a recovery (you only have 48 hours to cancel)
-4. Native mobile apps for the authenticator
-5. ERC-1271 support (signing into dApps), then a Solana version
+1. Token support beyond the native coin
+2. A watcher that alerts you when someone starts a recovery (you only have 48 hours to cancel)
+3. Native mobile apps for the authenticator
+4. ERC-1271 support (signing into dApps), then a Solana version

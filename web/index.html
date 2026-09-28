@@ -170,7 +170,40 @@ footer{margin-top:40px; padding-top:18px; border-top:1px solid var(--hairline); 
     <button class="btn" id="load">Open wallet</button>
     <button class="btn ghost" id="demo">Try a demo wallet</button>
   </div>
+  <p class="note">Don't have one yet? <a href="#" id="showCreate">Create a new wallet</a></p>
   <div id="setuperr"></div>
+</section>
+
+<!-- ============ CREATE ============ -->
+<section id="create" class="plate hide">
+  <h2 style="font-size:17px">Create a new wallet</h2>
+
+  <div class="flag bad">Three keys made from the same seed phrase protect you from nothing. If that one seed is stolen, all three keys go with it. Each key must come from a different device or a different seed phrase.</div>
+
+  <h3 style="font-size:15px; margin-top:20px">Confirm before you start</h3>
+  <div class="tier" id="checks">
+    <label><input type="checkbox" class="chk"> <span><span class="t">My three keys come from three different devices or seed phrases</span></span></label>
+    <label><input type="checkbox" class="chk"> <span><span class="t">My master key sits on a device I keep offline and put away</span></span></label>
+    <label><input type="checkbox" class="chk"> <span><span class="t">My backup key is written on paper, offline, somewhere safe</span></span></label>
+  </div>
+
+  <label for="cOwner">Master key address, kept offline</label>
+  <input type="text" id="cOwner" placeholder="0x…" spellcheck="false" autocomplete="off">
+  <label for="cAuth">Authenticator address, your second device</label>
+  <input type="text" id="cAuth" placeholder="0x…" spellcheck="false" autocomplete="off">
+  <label for="cRec">Backup key address, offline</label>
+  <input type="text" id="cRec" placeholder="0x…" spellcheck="false" autocomplete="off">
+
+  <label for="cFactory">Factory address on this network</label>
+  <input type="text" id="cFactory" placeholder="0x…" spellcheck="false" autocomplete="off">
+  <div class="row" style="margin-top:10px">
+    <button class="btn ghost" id="checkFactory">Check this factory</button>
+    <button class="btn ghost" id="backToOpen">Back</button>
+  </div>
+  <p class="note">The factory builds wallets. One per network is enough and everyone shares it, so you usually just paste an address someone already deployed. Look it up on a block explorer first and check its code is verified. If this network has no factory yet, deploy one with <code>forge script script/Deploy.s.sol</code> from the repo, then paste the address it prints.</p>
+
+  <button class="btn wide" id="preview" style="margin-top:18px">Check and preview</button>
+  <div id="createout"></div>
 </section>
 
 <!-- ============ MAIN ============ -->
@@ -240,6 +273,18 @@ footer{margin-top:40px; padding-top:18px; border-top:1px solid var(--hairline); 
   <!-- ---- KEYS ---- -->
   <section class="panel" id="p-keys" hidden>
     <div id="keyinfo"></div>
+
+    <h3 style="font-size:15px; margin-top:24px">Add a daily key</h3>
+    <p class="note">A daily key lives on your phone and spends on its own, up to a limit each day, until it expires. Setting one up needs your master key and your authenticator.</p>
+    <label for="dkAddr">Daily key address</label>
+    <input type="text" id="dkAddr" placeholder="0x…" spellcheck="false" autocomplete="off">
+    <div class="row">
+      <div><label for="dkCap">Daily limit</label><input type="number" id="dkCap" step="any" min="0" placeholder="0.5"></div>
+      <div><label for="dkDays">Expires after (days, 90 max)</label><input type="number" id="dkDays" min="1" max="90" value="30"></div>
+    </div>
+    <button class="btn wide" id="addDaily" style="margin-top:16px">Review and sign</button>
+    <div id="dailyout"></div>
+
     <div class="estop">
       <h3>Emergency stop</h3>
       <p>Turns off every daily key on this wallet right away. Your master key, authenticator and backup key keep working. Use this the moment a phone goes missing or something looks wrong.</p>
@@ -288,6 +333,14 @@ const ABI = [
   "function executeSession(address key,(address to,uint256 value,bytes data)[] calls,uint256 deadline,bytes sessionSig)",
   "function executeWithSessionAndAuth(address key,(address to,uint256 value,bytes data)[] calls,uint256 deadline,bytes sessionSig,bytes authenticatorSig)",
   "function revokeAllSessions(bytes sig)",
+  "function addSession((address key,uint64 validUntil,uint256 ethDailyCap,address[] tokens,uint256[] tokenDailyCaps,address[] targets) p,uint256 deadline,bytes ownerSig,bytes authenticatorSig)",
+];
+
+const FACTORY_ABI = [
+  "constructor()",
+  "function createWallet(address owner,address authenticator,address recovery,bytes32 salt) returns (address)",
+  "function predictAddress(address owner,address authenticator,address recovery,bytes32 salt) view returns (address)",
+  "event WalletCreated(address indexed wallet,address indexed owner,address indexed authenticator,address recovery)",
 ];
 
 /* EIP-712 shapes: these must match the contract's typehash strings exactly. */
@@ -297,6 +350,10 @@ const TYPES = {
   session: {SessionExecute:[{name:"sessionKey",type:"address"},{name:"generation",type:"uint64"},{name:"sessionNonce",type:"uint64"},{name:"calls",type:"Call[]"},{name:"deadline",type:"uint256"}], Call:CALL_TYPE},
   sessionAuth: {SessionAuthExecute:[{name:"sessionKey",type:"address"},{name:"generation",type:"uint64"},{name:"calls",type:"Call[]"},{name:"nonce",type:"uint256"},{name:"deadline",type:"uint256"}], Call:CALL_TYPE},
   revokeAll: {RevokeAllSessions:[{name:"epoch",type:"uint64"}]},
+  addSession: {AddSession:[
+    {name:"sessionKey",type:"address"},{name:"validUntil",type:"uint64"},{name:"ethDailyCap",type:"uint256"},
+    {name:"tokens",type:"address[]"},{name:"tokenDailyCaps",type:"uint256[]"},{name:"targets",type:"address[]"},
+    {name:"nonce",type:"uint256"},{name:"deadline",type:"uint256"}]},
 };
 
 /* ======================= state ======================= */
@@ -319,6 +376,11 @@ const esc = (s)=> String(s).replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"
   }
   sel.onchange = ()=>{ S.chainId = +sel.value; if (S.wallet) loadWallet(S.wallet); };
 })();
+
+window.addEventListener("load", ()=>{
+  const last = remembered("wallet:"+S.chainId);
+  if (last && !$("waddr").value) $("waddr").value = last;
+});
 
 function provider(){
   return new ethers.JsonRpcProvider(CHAINS[S.chainId].rpc, S.chainId, {staticNetwork:true});
@@ -375,6 +437,7 @@ async function loadWallet(addr){
       } catch(_) {}
     }
     S.demo = false;
+    remember("wallet:"+S.chainId, addr);
     render();
   } catch(e){
     if (String(e.message).includes("NOWALLET")) setErr("setuperr","No contract at that address on "+CHAINS[S.chainId].name+". Check the network selector at the top.");
@@ -461,13 +524,20 @@ $("build").onclick = async ()=>{
 function domain(){ return {name:"GuardWallet", version:"1", chainId:S.chainId, verifyingContract:S.wallet}; }
 
 function typedFor(req){
-  const calls = req.calls.map(c=>({to:c.to, value:BigInt(c.value), data:c.data}));
+  const calls = (req.calls || []).map(c=>({to:c.to, value:BigInt(c.value), data:c.data}));
   if (req.kind === "execute")
     return [TYPES.execute, {calls, nonce:BigInt(req.nonce), deadline:BigInt(req.deadline)}];
   if (req.kind === "session")
     return [TYPES.session, {sessionKey:req.sessionKey, generation:BigInt(req.generation), sessionNonce:BigInt(req.sessionNonce), calls, deadline:BigInt(req.deadline)}];
   if (req.kind === "sessionAuth")
     return [TYPES.sessionAuth, {sessionKey:req.sessionKey, generation:BigInt(req.generation), calls, nonce:BigInt(req.nonce), deadline:BigInt(req.deadline)}];
+  if (req.kind === "addSession") {
+    const p = req.params;
+    return [TYPES.addSession, {
+      sessionKey:p.key, validUntil:BigInt(p.validUntil), ethDailyCap:BigInt(p.ethDailyCap),
+      tokens:p.tokens, tokenDailyCaps:p.tokenDailyCaps.map(BigInt), targets:p.targets,
+      nonce:BigInt(req.nonce), deadline:BigInt(req.deadline)}];
+  }
   throw new Error("Unknown request type");
 }
 
@@ -475,7 +545,16 @@ function typedFor(req){
 function describe(req){
   const sym = CHAINS[req.chainId]?.sym || "ETH";
   const lines = [], flags = [];
-  for (const c of req.calls) {
+  if (req.kind === "addSession") {
+    const p = req.params;
+    lines.push(["Allow", p.key]);
+    lines.push(["To spend", "up to "+fmt(BigInt(p.ethDailyCap))+" "+sym+" per day"]);
+    lines.push(["Until", new Date(Number(p.validUntil)*1000).toLocaleString()]);
+    lines.push(["Approved apps", p.targets.length ? p.targets.join(", ") : "none - plain coin transfers only"]);
+    lines.push(["Tokens", p.tokens.length ? p.tokens.join(", ") : "none"]);
+    flags.push(["warn","This gives a new key the power to spend on its own, every day, until it expires. Check the address character by character."]);
+  }
+  for (const c of (req.calls || [])) {
     const v = BigInt(c.value);
     if (c.data === "0x" || !c.data) lines.push(["Send", fmt(v)+" "+sym+" to "+c.to]);
     else lines.push(["Call", c.to+" with "+((c.data.length-2)/2)+" bytes of instructions"]);
@@ -487,7 +566,7 @@ function describe(req){
     flags.push(["bad","This request is for "+(CHAINS[req.chainId]?.name||("chain "+req.chainId))+", but you are on "+CHAINS[S.chainId].name+"."]);
   const left = Number(BigInt(req.deadline) - BigInt(Math.floor(Date.now()/1000)));
   if (left <= 0) flags.push(["bad","This request has expired. Ask for a fresh one."]);
-  const who = {execute:"Master key + authenticator", session:"A daily key on its own", sessionAuth:"A daily key + authenticator"}[req.kind] || req.kind;
+  const who = {execute:"Master key + authenticator", session:"A daily key on its own", sessionAuth:"A daily key + authenticator", addSession:"Master key + authenticator"}[req.kind] || req.kind;
   return {lines, flags, who, left};
 }
 
@@ -526,7 +605,7 @@ async function signRequest(req, outId){
 }
 
 function needsSecond(req){
-  return req.kind === "execute" || req.kind === "sessionAuth";
+  return req.kind === "execute" || req.kind === "sessionAuth" || req.kind === "addSession";
 }
 
 function afterSign(req, outId){
@@ -571,6 +650,11 @@ async function submit(req, outId){
       tx = await c.executeSession(req.sessionKey, calls, BigInt(req.deadline), sigOf(req.sessionKey));
     } else if (req.kind === "sessionAuth") {
       tx = await c.executeWithSessionAndAuth(req.sessionKey, calls, BigInt(req.deadline), sigOf(req.sessionKey), sigOf(S.info.auth));
+    } else if (req.kind === "addSession") {
+      const p = req.params;
+      tx = await c.addSession(
+        [p.key, BigInt(p.validUntil), BigInt(p.ethDailyCap), p.tokens, p.tokenDailyCaps.map(BigInt), p.targets],
+        BigInt(req.deadline), sigOf(S.info.owner), sigOf(S.info.auth));
     } else {
       tx = await c.execute(calls, BigInt(req.deadline), sigOf(S.info.owner), sigOf(S.info.auth));
     }
@@ -635,6 +719,116 @@ $("estop").onclick = async ()=>{
     loadWallet(S.wallet);
   } catch(e){ setErr("keyout", friendly(e)); }
 };
+
+/* ======================= create a wallet ======================= */
+$("showCreate").onclick = (e)=>{ e.preventDefault(); $("setup").classList.add("hide"); $("create").classList.remove("hide"); $("cFactory").value = remembered("factory:"+S.chainId) || ""; };
+$("backToOpen").onclick = ()=>{ $("create").classList.add("hide"); $("setup").classList.remove("hide"); };
+
+$("checkFactory").onclick = async ()=>{
+  clear("createout");
+  const fac = $("cFactory").value.trim();
+  if (!ethers.isAddress(fac)) return setErr("createout","That factory address is not valid.");
+  try{
+    if (await provider().getCode(fac) === "0x")
+      return setErr("createout","Nothing is deployed at that address on "+CHAINS[S.chainId].name+". Check the network selector, or deploy a factory here first.");
+    const f = new ethers.Contract(fac, FACTORY_ABI, provider());
+    const probe = await f.predictAddress(
+      "0x0000000000000000000000000000000000000001",
+      "0x0000000000000000000000000000000000000002",
+      "0x0000000000000000000000000000000000000003", ethers.ZeroHash);
+    if (!ethers.isAddress(probe)) throw new Error("bad reply");
+    remember("factory:"+S.chainId, fac);
+    $("createout").innerHTML = '<div class="ok">That address answers like a factory. Saved for this network. Check its verified source on a block explorer before you trust it with anything.</div>';
+  } catch(e){ setErr("createout","That address is a contract, but it does not behave like a GuardWallet factory. Do not use it."); }
+};
+
+$("preview").onclick = async ()=>{
+  clear("createout");
+  const ticked = Array.from(document.querySelectorAll("#checks .chk")).every(c=>c.checked);
+  if (!ticked) return setErr("createout","Tick all three boxes first. They are the whole point of this wallet.");
+  if (!S.signer) return setErr("createout","Connect the wallet that will pay the network fee.");
+
+  const owner = $("cOwner").value.trim(), auth = $("cAuth").value.trim(), rec = $("cRec").value.trim();
+  const fac = $("cFactory").value.trim();
+  for (const [label, a] of [["Master key", owner], ["Authenticator", auth], ["Backup key", rec], ["Factory", fac]]) {
+    if (!ethers.isAddress(a)) return setErr("createout", label+" is not a valid address.");
+  }
+  const lower = [owner, auth, rec].map(a=>a.toLowerCase());
+  if (new Set(lower).size !== 3) return setErr("createout","Your three keys must be three different addresses. Using the same one twice removes the protection entirely.");
+
+  try{
+    const factory = new ethers.Contract(fac, FACTORY_ABI, S.signer);
+    let salt = 0n, predicted = null;
+    for (; salt < 20n; salt++) {
+      predicted = await factory.predictAddress(owner, auth, rec, ethers.toBeHex(salt, 32));
+      if (await provider().getCode(predicted) === "0x") break;
+    }
+    if (salt >= 20n) return setErr("createout","A wallet already exists for these keys. Open it by address instead.");
+
+    const me = (await S.signer.getAddress()).toLowerCase();
+    const warns = [];
+    if (me === owner.toLowerCase()) warns.push("You are connected as your master key. It works, but your master key is meant to stay offline. Consider paying the fee from a different account.");
+    if (me === rec.toLowerCase()) warns.push("You are connected as your backup key. It is meant to stay offline.");
+
+    $("createout").innerHTML =
+      '<div class="review"><h3>Check this carefully</h3>'+
+      '<div class="kv"><span>New wallet will be at</span><span>'+esc(predicted)+'</span></div>'+
+      '<div class="kv"><span>Master key</span><span>'+esc(owner)+'</span></div>'+
+      '<div class="kv"><span>Authenticator</span><span>'+esc(auth)+'</span></div>'+
+      '<div class="kv"><span>Backup key</span><span>'+esc(rec)+'</span></div>'+
+      '<div class="kv"><span>Network</span><span>'+esc(CHAINS[S.chainId].name)+'</span></div>'+
+      warns.map(w=>'<div class="flag">'+esc(w)+'</div>').join("")+
+      '<div class="flag">Losing your master key and your backup key together means losing the wallet. Nobody can recover it for you.</div>'+
+      '</div>';
+    const b = document.createElement("button");
+    b.className = "btn wide"; b.style.marginTop = "14px"; b.textContent = "Create this wallet";
+    b.onclick = ()=> doCreate(factory, owner, auth, rec, ethers.toBeHex(salt, 32), predicted);
+    $("createout").appendChild(b);
+  } catch(e){ setErr("createout", friendly(e)); }
+};
+
+async function doCreate(factory, owner, auth, rec, salt, predicted){
+  try{
+    $("createout").insertAdjacentHTML("beforeend",'<div class="ok">Confirm it in your wallet, then wait for the network.</div>');
+    const tx = await factory.createWallet(owner, auth, rec, salt);
+    await tx.wait();
+    remember("wallet:"+S.chainId, predicted);
+    $("createout").insertAdjacentHTML("beforeend",
+      '<div class="ok">Your wallet is live at '+esc(predicted)+'. Send a small amount to it first and try moving it back out before you trust it with more.</div>');
+    $("create").classList.add("hide");
+    S.demo = false;
+    loadWallet(predicted);
+  } catch(e){ setErr("createout", friendly(e)); }
+}
+
+/* ======================= add a daily key ======================= */
+$("addDaily").onclick = async ()=>{
+  clear("dailyout");
+  if (!S.signer) return setErr("dailyout","Connect your master key first. Adding a daily key needs your master key and your authenticator.");
+  const key = $("dkAddr").value.trim();
+  if (!ethers.isAddress(key)) return setErr("dailyout","That daily key address is not valid.");
+  const capStr = $("dkCap").value.trim();
+  if (!capStr || Number(capStr) <= 0) return setErr("dailyout","Set a daily limit greater than zero.");
+  const days = parseInt($("dkDays").value, 10);
+  if (!(days >= 1 && days <= 90)) return setErr("dailyout","Pick between 1 and 90 days.");
+
+  const i = S.info, low = key.toLowerCase();
+  if ([i.owner, i.auth, i.recovery].some(a=>a.toLowerCase() === low))
+    return setErr("dailyout","A daily key has to be its own separate key, not one of your three main keys.");
+
+  let cap; try { cap = ethers.parseEther(capStr); } catch { return setErr("dailyout","That daily limit is not a number."); }
+  const params = {
+    key, validUntil: Math.floor(Date.now()/1000) + days*86400, ethDailyCap: cap.toString(),
+    tokens: [], tokenDailyCaps: [], targets: [],
+  };
+  const req = {v:1, kind:"addSession", chainId:S.chainId, wallet:S.wallet,
+               params, nonce:i.nonce, deadline:BigInt(Math.floor(Date.now()/1000) + 3600)};
+  renderReview("dailyout", req, true);
+};
+
+/* ======================= remembering things ======================= */
+function remember(k, v){ try { localStorage.setItem("guardwallet:"+k, v); } catch(_) {} }
+function remembered(k){ try { return localStorage.getItem("guardwallet:"+k); } catch(_) { return null; } }
 
 /* ======================= QR ======================= */
 function pack(o){
